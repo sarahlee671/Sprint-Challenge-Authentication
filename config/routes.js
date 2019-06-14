@@ -1,6 +1,16 @@
 const axios = require('axios');
 
+const bcrypt = require('bcryptjs')
+
+const jwt = require('jsonwebtoken');
+
 const { authenticate } = require('../auth/authenticate');
+
+const secrets = require('../secret/secrets.js');
+
+const db = require('../database/dbConfig.js');
+
+
 
 module.exports = server => {
   server.post('/api/register', register);
@@ -10,10 +20,40 @@ module.exports = server => {
 
 function register(req, res) {
   // implement user registration
+  const user = req.body;
+  console.log(user.password)
+  const hash = bcrypt.hashSync(user.password, 10);
+  user.password = hash;
+  db('users')
+    .insert(user)
+    .then(saved => {
+      res.status(201).json(saved);
+    })
+    .catch(err => {
+      res.status(500).json(error);
+    })
 }
 
 function login(req, res) {
   // implement user login
+  const creds = req.body;
+  db('users')
+    .where({username: creds.username})
+    .first()
+    .then(user => {
+      if (user && bcrypt.compareSync(creds.password, user.password)) {
+        const token = generateToken(user)
+        res.status(200).json({
+          message: `Welcome ${user.username}`,
+          token
+        })
+      } else {
+        res.status(401).json({message: 'Invalid Credentials'})
+      }
+    })
+    .catch(err => {
+      res.status(500).json({message: err})
+    })
 }
 
 function getJokes(req, res) {
@@ -29,4 +69,16 @@ function getJokes(req, res) {
     .catch(err => {
       res.status(500).json({ message: 'Error Fetching Jokes', error: err });
     });
+}
+
+function generateToken(user) {
+  const payload = {
+    subject: user.id, 
+    username: user.username,
+  };
+  const options = {
+    expiresIn: '1d',
+  }
+  return jwt.sign(payload, secrets.jwtKey, options)
+  
 }
